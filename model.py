@@ -83,11 +83,13 @@ class Model:
         if not table_exists:
             c.execute('''
                 CREATE TABLE "Publishing" (
-                    "AuthorID" character varying COLLATE pg_catalog."default" NOT NULL,
-                    "PublicationID" character varying COLLATE pg_catalog."default" NOT NULL,
-                    "ISSN" integer NOT NULL,
-                    "Date" date NOT NULL,
-                    CONSTRAINT "Publishing_pkey" PRIMARY KEY ("AuthorID", "PublicationID", "ISSN")
+                    "AuthorID" character varying,
+                    "PublicationID" character varying,
+                    "ISSN" integer,
+                    "date" date,
+                    CONSTRAINT "Publishing_AuthorID_fkey" FOREIGN KEY ("AuthorID") REFERENCES "Author" ("AuthorID"),
+                    CONSTRAINT "Publishing_PublicationID_fkey" FOREIGN KEY ("PublicationID") REFERENCES "Publication" ("PublicationID"),
+                    CONSTRAINT "Publishing_ISSN_fkey" FOREIGN KEY ("ISSN") REFERENCES "Collection" ("ISSN")
                 )
             ''')
 
@@ -106,9 +108,12 @@ class Model:
             c.execute(sql, list(data.values()))
             self.conn.commit()
             self.view.show_message("Added successfully!")
-        except psycopg2.Error as e:
+        except psycopg2.errors.ForeignKeyViolation as e:
             self.conn.rollback()
-            print(e)
+            self.view.show_message(f"ПОМИЛКА: немає референсу на дані з батьківських таблиць. \nКод помилки: {e.pgcode}.")
+        except psycopg2.errors.UniqueViolation as e:
+            self.conn.rollback()
+            self.view.show_message(f"ПОМИЛКА: дані з таким ключем вже існують. \nКод помилки: {e.pgcode}.")
 
     def update_data(self, table_name, data, condition_column, condition_value):
         try:
@@ -140,9 +145,9 @@ class Model:
             c.execute(sql)
             self.conn.commit()
             self.view.show_message("Deleted successfully!")
-        except psycopg2.Error as e:
+        except psycopg2.errors.ForeignKeyViolation as e:
             self.conn.rollback()
-            print(e)
+            self.view.show_message(f"ПОМИЛКА: видаліть спочатку з \"Publishing\" записи з \"{cond}\" = '{val}'\nПісля чого спробуйте ще раз.")
 
     def delete_data_publishing(self, table_name, cond1, val1, cond2, val2, cond3, val3):
         try:
