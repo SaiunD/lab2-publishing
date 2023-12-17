@@ -2,6 +2,7 @@ from model import Model
 from view import View
 import time
 
+
 class Controller:
     def __init__(self):
         self.model = Model()

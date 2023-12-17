@@ -1,275 +1,339 @@
-import psycopg2
+import random
+import string
+from datetime import datetime, timedelta
+from random import random
+
+import sqlalchemy
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, func, literal_column, text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from view import View
+from database import Database
+
+Base = declarative_base()
+
+
+class Author(Base):
+    __tablename__ = 'Author'
+    AuthorID = Column(String, primary_key=True)
+    Name = Column(String)
+    Surname = Column(String)
+
+    def __repr__(self):
+        return "<Author(name='{}', surname='{}')>" \
+            .format(self.Name, self.Surname)
+
+
+class Publication(Base):
+    __tablename__ = 'Publication'
+    PublicationID = Column(String, primary_key=True)
+    Name = Column(String)
+    Language = Column(String)
+    Field = Column(String)
+    Pages = Column(Integer)
+
+    def __repr__(self):
+        return "<Publication(name='{}', language='{}', field={}, pages={})>" \
+            .format(self.Name, self.Language, self.Field, self.Pages)
+
+    def generate_random_language(self):
+        languages = ['ukrainian', 'english', 'spanish', 'croatian', 'portuguese', 'french']
+        return random.choice(languages)
+
+    def generate_random_field(self):
+        fields = ['medicine', 'biology', 'engineering', 'economics', 'physics', 'chemistry', 'history', 'philosophy']
+        return random.choice(fields)
+
+
+class Collection(Base):
+    __tablename__ = 'Collection'
+    ISSN = Column(Integer, primary_key=True)
+    Name = Column(String)
+    Type = Column(String)
+    Category = Column(String)
+
+    def __repr__(self):
+        return "<Collection(ISSN='{}', name='{}', type={}, category={})>" \
+            .format(self.ISSN, self.Name, self.Type, self.Category)
+
+    def generate_random_type(self):
+        types = ['e-book', 'paper book']
+        return random.choice(types)
+
+    def generate_random_category(self):
+        categories = ['A', 'B', 'C']
+        return random.choice(categories)
+
+
+class Publishing(Base):
+    __tablename__ = 'Publishing'
+    AuthorID = Column(String, ForeignKey('Author.AuthorID'), primary_key=True)
+    PublicationID = Column(String, ForeignKey('Publication.PublicationID'), primary_key=True)
+    ISSN = Column(Integer, ForeignKey('Collection.ISSN'), primary_key=True)
+    date = Column(Date)
+    author = relationship(Author, backref="authors")
+    publication = relationship(Publication, backref="publications")
+    collection = relationship(Collection, backref="collections")
+
+    def __repr__(self):
+        return "<Publishing(date='{}')>" \
+            .format(self.date)
 
 
 class Model:
     def __init__(self):
-        self.conn = psycopg2.connect(
-            dbname='postgres',
-            user='postgres',
-            password='230520',
-            host='localhost',
-            port=5432
-        )
         self.view = View()
-        self.create_table_author()
-        self.create_table_publication()
-        self.create_table_collection()
-        self.create_table_publishing()
-
-    def create_table_author(self):
-        c = self.conn.cursor()
-
-        c.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'Author')")
-        table_exists = c.fetchone()[0]
-
-        if not table_exists:
-            c.execute('''
-                CREATE TABLE "Author" (
-                    "AuthorID" character varying NOT NULL,
-                    "Name" character varying NOT NULL,
-                    "Surname" character varying NOT NULL,
-                    CONSTRAINT "Author_pkey" PRIMARY KEY ("AuthorID")
-                )
-            ''')
-
-        self.conn.commit()
-
-    def create_table_publication(self):
-        c = self.conn.cursor()
-
-        c.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'Publicaion')")
-        table_exists = c.fetchone()[0]
-
-        if not table_exists:
-            c.execute('''
-                CREATE TABLE IF NOT EXISTS "Publication" (
-                    "PublicationID" character varying NOT NULL,
-                    "Name" character varying NOT NULL,
-                    "Language" character varying NOT NULL,
-                    "Field" character varying NOT NULL,
-                    "Pages" integer,
-                    CONSTRAINT "Publication_pkey" PRIMARY KEY ("PublicationID")
-                )
-            ''')
-
-        self.conn.commit()
-
-    def create_table_collection(self):
-        c = self.conn.cursor()
-
-        c.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'Collection')")
-        table_exists = c.fetchone()[0]
-
-        if not table_exists:
-            c.execute('''
-                CREATE TABLE "Collection" (
-                    "ISSN" integer NOT NULL,
-                    "Name" character varying NOT NULL,
-                    "Type" character varying NOT NULL,
-                    "Category" character varying NOT NULL,
-                    CONSTRAINT "Collection_pkey" PRIMARY KEY ("ISSN")
-                )
-            ''')
-
-        self.conn.commit()
-
-    def create_table_publishing(self):
-        c = self.conn.cursor()
-
-        c.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'Publishing')")
-        table_exists = c.fetchone()[0]
-
-        if not table_exists:
-            c.execute('''
-                CREATE TABLE "Publishing" (
-                    "AuthorID" character varying,
-                    "PublicationID" character varying,
-                    "ISSN" integer,
-                    "date" date,
-                    CONSTRAINT "Publishing_AuthorID_fkey" FOREIGN KEY ("AuthorID") REFERENCES "Author" ("AuthorID"),
-                    CONSTRAINT "Publishing_PublicationID_fkey" FOREIGN KEY ("PublicationID") REFERENCES "Publication" ("PublicationID"),
-                    CONSTRAINT "Publishing_ISSN_fkey" FOREIGN KEY ("ISSN") REFERENCES "Collection" ("ISSN")
-                )
-            ''')
-
-        self.conn.commit()
+        self.DB = Database(Base)
 
     def get_all(self, table_name):
-        c = self.conn.cursor()
-        c.execute(f'SELECT * FROM "{table_name}"')
-        return c.fetchall()
+        t = self.get_class(table_name)
+        return self.DB.session.query(t).all()
 
     def add_data(self, table_name, data):
-        try:
-            c = self.conn.cursor()
-            placeholders = ", ".join(["%s"] * len(data))
-            sql = f"INSERT INTO \"{table_name}\" VALUES ({placeholders});"
-            c.execute(sql, list(data.values()))
-            self.conn.commit()
-            self.view.show_message("Added successfully!")
-        except psycopg2.errors.ForeignKeyViolation as e:
-            self.conn.rollback()
-            self.view.show_message(f"ПОМИЛКА: немає референсу на дані з батьківських таблиць. \nКод помилки: {e.pgcode}.")
-        except psycopg2.errors.UniqueViolation as e:
-            self.conn.rollback()
-            self.view.show_message(f"ПОМИЛКА: дані з таким ключем вже існують. \nКод помилки: {e.pgcode}.")
+        if table_name == "Author":
+            t = Author(
+                AuthorID=data[0],
+                Name=data[1],
+                Surname=data[2]
+            )
+        elif table_name == "Publication":
+            t = Publication(
+                PublicationID=data[0],
+                Name=data[1],
+                Language=data[2],
+                Field=data[3],
+                Pages=data[4]
+            )
+        elif table_name == "Collection":
+            t = Collection(
+                ISSN=data[0],
+                Name=data[1],
+                Type=data[2],
+                Category=data[3]
+            )
+        elif table_name == "Publishing":
+            t = Publishing(
+                AuthorID=data[0],
+                PublicationID=data[1],
+                ISSN=data[2],
+                date=data[3]
+            )
+        self.DB.session.add(t)
+        self.DB.session.commit()
+        print("Added successfully!")
 
     def update_data(self, table_name, data, condition_column, condition_value):
-        try:
-            if not table_name or not data or not condition_column or condition_value is None:
-                print("Insufficient information to update data.")
-                return
+        if table_name == "Author":
+            u = self.DB.session.query(Author).filter_by(AuthorID=condition_value).first()
+            u.Name = data[1]
+            u.Surname = data[2]
+        elif table_name == "Publication":
+            u = self.DB.session.query(Publication).filter_by(PublicationID=condition_value).first()
+            u.Name = data[1]
+            u.Language = data[2]
+            u.Field = data[3]
+            u.Pages = data[4]
+        elif table_name == "Collection":
+            u = self.DB.session.query(Collection).filter_by(ISSN=condition_value).first()
+            u.Name = data[1]
+            u.Type = data[2]
+            u.Category = data[3]
+        self.DB.session.commit()
+        self.view.show_message("Updated successfully!")
 
-            c = self.conn.cursor()
-            set_clause = ", ".join([f"{key} = %s" for key in data.keys()])
-            sql = f"UPDATE \"{table_name}\" SET {set_clause} WHERE \"{condition_column}\" = %s;"
-
-            values = list(data.values())
-            values.append(condition_value)
-            c.execute(sql, values)
-            self.conn.commit()
-            self.view.show_message("Updated successfully!")
-        except psycopg2.Error as e:
-            self.conn.rollback()
-            print(e)
+    def get_class(self, table_name):
+        if table_name == "Author":
+            return Author
+        elif table_name == "Publication":
+            return Publication
+        elif table_name == "Collection":
+            return Collection
+        elif table_name == "Publishing":
+            return Publishing
 
     def delete_data(self, table_name, cond, val):
-        try:
-            if not table_name or cond is None:
-                print("Insufficient information to update data.")
-                return
+        t = self.get_class(table_name)
+        d = self.DB.query(t).filter(
+            getattr(t, cond) == val).first()
 
-            c = self.conn.cursor()
-            sql = f"DELETE FROM \"{table_name}\" WHERE \"{cond}\" = '{val}';"
-            c.execute(sql)
-            self.conn.commit()
-            self.view.show_message("Deleted successfully!")
-        except psycopg2.errors.ForeignKeyViolation as e:
-            self.conn.rollback()
-            self.view.show_message(f"ПОМИЛКА: видаліть спочатку з \"Publishing\" записи з \"{cond}\" = '{val}'\nПісля чого спробуйте ще раз.")
+        # Перевіримо, чи знайдено запис
+        if d:
+            # Видалимо запис
+            self.DB.session.delete(d)
+
+            # Збережемо зміни
+            self.DB.session.commit()
+            print("Дані видалено успішно.")
+        else:
+            print("Запис не знайдено.")
 
     def delete_data_publishing(self, table_name, cond1, val1, cond2, val2, cond3, val3):
-        try:
-            if not table_name or cond1 or cond2 or cond3 is None:
-                print("Insufficient information to update data.")
-                return
+        d = (
+            self.DB.session.query(Publishing)
+            .filter(getattr(Publishing, cond1) == val1)
+            .filter(getattr(Publishing, cond2) == val2)
+            .filter(getattr(Publishing, cond3) == val3)
+            .first()
+        )
+        if d:
+            # Видалимо запис
+            self.DB.session.delete(d)
 
-            c = self.conn.cursor()
-            sql = f"DELETE FROM \"{table_name}\" WHERE \"{cond1}\" = '{val1}' AND \"{cond2}\" = '{val2}'AND \"{cond3}\" = {val3}"
-            c.execute(sql)
-            self.conn.commit()
-            self.view.show_message("Deleted successfully!")
-        except psycopg2.Error as e:
-            self.conn.rollback()
-            print(e)
+            # Збережемо зміни
+            self.DB.session.commit()
+            print("Дані видалено успішно.")
+        else:
+            print("Запис не знайдено.")
+
+    def random_string(length):
+        letters = string.ascii_letters
+        return ''.join(random.choice(letters) for _ in range(length))
+
+    def generate_random_date(self):
+        start_date = datetime(2000, 1, 1)
+        random_days = timedelta(days=int(random() * 366 * 10))
+        return start_date + random_days
 
     def generate_data(self, table_name, num):
         try:
-            c = self.conn.cursor()
             if table_name == "Author":
-                sql = (f"insert into \"Author\" select distinct md5(random()::text), chr(trunc(65+random()*25)::int) || chr(trunc(97+random()*26)::int) || chr(trunc(97+random()*26)::int), chr(trunc(65+random()*25)::int) || chr(trunc(97+random()*26)::int) || chr(trunc(97+random()*26)::int)"
-                       f"from generate_series(1,{num})")
+                for _ in range(num):
+                    author = Author(
+                        AuthorID=func.md5(func.cast(func.random(), sqlalchemy.Text)).label('AuthorID'),
+                        Name=func.concat(
+                            literal_column("CAST(trunc(random() * 26) + 65 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 26) + 97 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 26) + 97 AS INTEGER)")
+                        ).label('Name'),
+                        Surname=func.concat(
+                            literal_column("CAST(trunc(random() * 26) + 65 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 26) + 97 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 26) + 97 AS INTEGER)")
+                        ).label('Surname')
+                    )
+                    self.DB.session.add(author)
             elif table_name == "Publication":
-                sql = (f"INSERT INTO \"Publication\""
-                       f"SELECT DISTINCT "
-                       f"md5(random()::text), "
-                       f"chr(trunc(65 + random() * 25)::int) || chr(trunc(97 + random() * 26)::int) || chr(trunc(97 + random() * 26)::int) || chr(trunc(65 + random() * 25)::int) || chr(trunc(97 + random() * 26)::int) || chr(trunc(97 + random() * 26)::int), "
-                       f"('{{\"ukrainian\", \"english\", \"spanish\", \"croatian\", \"portuguese\", \"french\"}}'::text[])[floor(random()*6)+1], "
-                       f"('{{\"medicine\", \"biology\", \"engineering\", \"economics\", \"physics\", \"chemistry\", \"history\", \"philosophy\"}}'::text[])[floor(random()*8+1)], floor(random() * 100) "
-                       f"FROM generate_series(1, {num})"
-                       )
+                for _ in range(num):
+                    publication = Publication(
+                        PublicationID=func.md5(func.cast(func.random(), sqlalchemy.Text)).label('PublicationID'),
+                        Name=func.concat(
+                            literal_column("CAST(trunc(random() * 25) + 65 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 26) + 97 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 26) + 97 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 25) + 65 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 26) + 97 AS INTEGER)"),
+                            literal_column("CAST(trunc(random() * 26) + 97 AS INTEGER)")
+                        ).label('Name'),
+                        Language=Publication.generate_random_language(Base),
+                        Field=Publication.generate_random_field(Base),
+                        Pages=func.floor(func.random() * 100)
+                    )
+                    self.DB.session.add(publication)
             elif table_name == "Collection":
-                sql = (f"INSERT INTO \"Collection\""
-                       f"SELECT pr.\"ISSN\", pr.\"Name\", pr.\"Type\", pr.\"Category\""
-                       f"FROM \"Collection\""
-                       f"RIGHT JOIN"
-                       f"(SELECT DISTINCT "
-                       f"floor(random() * 100000000) + 1, "
-                       f"chr(trunc(65 + random() * 25)::int) || chr(trunc(97 + random() * 26)::int) || chr(trunc(97 + random() * 26)::int) || chr(trunc(65 + random() * 25)::int) || chr(trunc(97 + random() * 26)::int) || chr(trunc(97 + random() * 26)::int), "
-                       f"('{{\"e-book\", \"paper book\"}}'::text[])[floor(random()*2)+1], "
-                       f"('{{\"A\", \"B\", \"C\"}}'::text[])[floor(random()*3+1)] "
-                       f"FROM generate_series(1, {num})) pr"
-                       f"ON \"Collection\".\"ISSN\" = sb.\"ISSN\" and \"Collection\".\"Name\"=sb.\"Name\" and \"Collection\".\"Type\" = sb.\"Type\" and \"Collection\".\"Category\"=sb.\"Category\""
-                       f"WHERE \"Collection\".\"ISSN\" is null and \"Collection\".\"Name\" is null and \"Collection\".\"Type\" is null and \"Collection\".\"Category\" is null"
-                       )
+                for _ in range(num):
+                    collection = Collection(
+                        ISSN=func.floor(func.random() * 100000000) + 1,
+                        Name=func.concat(
+                            func.cast(func.trunc(65 + func.random() * 25), String),
+                            func.cast(func.trunc(97 + func.random() * 26), String),
+                            func.cast(func.trunc(97 + func.random() * 26), String),
+                            func.cast(func.trunc(65 + func.random() * 25), String),
+                            func.cast(func.trunc(97 + func.random() * 26), String),
+                            func.cast(func.trunc(97 + func.random() * 26), String), ),
+                        Type=Collection.generate_random_type(Base),
+                        Category=Collection.generate_random_category(Base)
+                    )
+                    self.DB.session.add(collection)
+
             elif table_name == "Publishing":
-                num3 = round(num**(1/3), 0)
-                sql = (f"INSERT INTO \"Publishing\" "
-                       f"SELECT pr.\"AuthorID\", pr.\"PublicationID\", pr.\"ISSN\", pr.\"Date\" "
-                       f"FROM \"Publishing\" RIGHT JOIN"
-                       f"(SELECT DISTINCT "
-                       f"t1.\"AuthorID\", "
-                       f"t2.\"PublicationID\", "
-                       f"t3.\"ISSN\", "
-                       f"'2000-01-01'::date + trunc(random() * 366 * 10)::int as \"Date\" "
-                       f"FROM "
-                       f"(SELECT \"AuthorID\", row_number() OVER (ORDER BY random()) as rn FROM \"Author\" order by random() LIMIT {num3}) t1, "
-                       f"(SELECT \"PublicationID\", row_number() OVER (ORDER BY random()) as rn FROM \"Publication\" order by random() LIMIT {num3}) t2, "
-                       
-                       
-                       f"(SELECT \"ISSN\", row_number() OVER (ORDER BY random()) as rn FROM \"Collection\" order by random() LIMIT {num3}) t3 "
-                       f"LIMIT {num}) pr "
-                       f"ON \"Publishing\".\"AuthorID\" = pr.\"AuthorID\" "
-                       f"AND \"Publishing\".\"PublicationID\" = pr.\"PublicationID\""
-                       f"AND \"Publishing\".\"ISSN\" = pr.\"ISSN\""
-                       f"WHERE \"Publishing\".\"AuthorID\" IS NULL and \"Publishing\".\"PublicationID\" is null and \"Publishing\".\"ISSN\" is null"
-                       )
-            c.execute(sql, num)
-            self.conn.commit()
-        except psycopg2.Error as e:
-            self.conn.rollback()
+                num3 = round(num ** (1 / 3))
+                sql = text(
+                    "INSERT INTO \"Publishing\" "
+                    "SELECT pr.\"AuthorID\", pr.\"PublicationID\", pr.\"ISSN\", pr.\"Date\" "
+                    "FROM \"Publishing\" RIGHT JOIN "
+                    "(SELECT DISTINCT "
+                    "t1.\"AuthorID\", "
+                    "t2.\"PublicationID\", "
+                    "t3.\"ISSN\", "
+                    "'2000-01-01'::date + trunc(random() * 366 * 10)::int as \"Date\" "
+                    "FROM "
+                    "(SELECT \"AuthorID\", row_number() OVER (ORDER BY random()) as rn FROM \"Author\" order by random() LIMIT :num3) t1, "
+                    "(SELECT \"PublicationID\", row_number() OVER (ORDER BY random()) as rn FROM \"Publication\" order by random() LIMIT :num3) t2, "
+                    "(SELECT \"ISSN\", row_number() OVER (ORDER BY random()) as rn FROM \"Collection\" order by random() LIMIT :num3) t3 "
+                    "LIMIT :num) pr "
+                    "ON \"Publishing\".\"AuthorID\" = pr.\"AuthorID\" "
+                    "AND \"Publishing\".\"PublicationID\" = pr.\"PublicationID\" "
+                    "AND \"Publishing\".\"ISSN\" = pr.\"ISSN\" "
+                    "WHERE \"Publishing\".\"AuthorID\" IS NULL and \"Publishing\".\"PublicationID\" is null and \"Publishing\".\"ISSN\" is null"
+                )
+
+                self.DB.session.execute(sql, {'num3': num3, 'num': num})
+
+            self.DB.session.commit()
+
+        except SQLAlchemyError as e:
+            self.DB.session.rollback()
             print(e)
 
     def show_by_field_language(self, field, language):
         try:
-            c = self.conn.cursor()
-            sql = (f"SELECT \"Author\".\"Name\" AS author_name, \"Author\".\"Surname\" AS author_surname, \"Publication\".\"Name\" AS pub_name, \"Publishing\".\"Date\" "
-                   f"FROM \"Author\" "
-                   f"JOIN \"Publishing\" ON \"Author\".\"AuthorID\" = \"Publishing\".\"AuthorID\""
-                   f"JOIN \"Publication\" ON \"Publishing\".\"PublicationID\" = \"Publication\".\"PublicationID\" "
-                   f"WHERE \"Publication\".\"Field\" = '{field}' AND \"Publication\".\"Language\" = '{language}'"
-                   )
-            c.execute(sql)
-            self.conn.commit()
-            return c.fetchall()
-        except psycopg2.Error as e:
-            self.conn.rollback()
+            result = (
+                self.DB.session.query(
+                    Author.Name.label('author_name'),
+                    Author.Surname.label('author_surname'),
+                    Publication.Name.label('pub_name'),
+                    Publishing.date
+                )
+                .join(Publishing, Author.AuthorID == Publishing.AuthorID)
+                .join(Publication, Publishing.PublicationID == Publication.PublicationID)
+                .filter(Publication.Field == field, Publication.Language == language)
+                .all()
+            )
+            return result
+        except SQLAlchemyError as e:
+            # Обробка помилок
+            self.DB.session.rollback()
             print(e)
 
     def show_by_category(self, category):
         try:
-            c = self.conn.cursor()
-            sql = (f"SELECT a.\"Name\", a.\"Surname\", COUNT(p.\"PublicationID\") AS PublicationCount "
-                   f"FROM \"Author\" a "
-                   f"INNER JOIN \"Publishing\" pb ON a.\"AuthorID\" = pb.\"AuthorID\" "
-                   f"INNER JOIN \"Publication\" p ON pb.\"PublicationID\" = p.\"PublicationID\" "
-                   f"INNER JOIN \"Collection\" c ON pb.\"ISSN\" = c.\"ISSN\" "
-                   f"WHERE c.\"Category\" = '{category}' "
-                   f"GROUP BY a.\"Name\", a.\"Surname\", c.\"Category\""
-                   )
-            c.execute(sql)
-            self.conn.commit()
-            return c.fetchall()
-        except psycopg2.Error as e:
-            self.conn.rollback()
+            result = (
+                self.DB.session.query(
+                    Author.Name.label('author_name'),
+                    Author.Surname.label('author_surname'),
+                    func.count(Publication.PublicationID).label('PublicationCount')
+                )
+                .join(Publishing, Author.AuthorID == Publishing.AuthorID)
+                .join(Publication, Publishing.PublicationID == Publication.PublicationID)
+                .join(Collection, Publishing.ISSN == Collection.ISSN)
+                .filter(Collection.Category == category)
+                .group_by(Author.Name, Author.Surname, Collection.Category)
+                .all()
+            )
+            return result
+        except SQLAlchemyError as e:
+            # Обробка помилок
+            self.DB.session.rollback()
             print(e)
 
     def show_collection(self, issn):
         try:
-            c = self.conn.cursor()
-            sql = (f"SELECT P.\"Language\", COUNT(*) AS PublicationCount "
-                   f"FROM \"Publication\" P "
-                   f"INNER JOIN \"Publishing\" PA ON PA.\"PublicationID\" = P.\"PublicationID\" "
-                   f"INNER JOIN \"Author\" as A ON A.\"AuthorID\" = PA.\"AuthorID\" "
-                   f"INNER JOIN \"Collection\" C ON PA.\"ISSN\" = C.\"ISSN\" "
-                   f"WHERE c.\"ISSN\" = {issn} "
-                   f"GROUP BY P.\"Language\" "
-                   f"ORDER BY PublicationCount"
-                   )
-            c.execute(sql)
-            self.conn.commit()
-            return c.fetchall()
-        except psycopg2.Error as e:
-            self.conn.rollback()
+            result = (
+                self.DB.session.query(
+                    Publication.Language.label('Language'),
+                    func.count().label('PublicationCount')
+                )
+                .join(Publishing, Publication.PublicationID == Publishing.PublicationID)
+                .join(Author, Publishing.AuthorID == Author.AuthorID)
+                .join(Collection, Publishing.ISSN == Collection.ISSN)
+                .filter(Collection.ISSN == issn)
+                .group_by(Publication.Language)
+                .order_by(func.count())
+                .all()
+            )
+            return result
+        except SQLAlchemyError as e:
+            # Обробка помилок
+            self.DB.session.rollback()
             print(e)

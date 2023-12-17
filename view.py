@@ -8,9 +8,10 @@ class View:
             print(f"ID: {task[0]}, Title: {task[1]}, Description: {task[2]}")
 
     def show_author(self, tasks):
+        data = [(obj.AuthorID, obj.Name, obj.Surname) for obj in tasks]
         print("Authors:")
         headers = ["AuthorID", "Name", "Surname"]
-        table = tabulate(tasks, headers, tablefmt="pretty")
+        table = tabulate(data, headers, tablefmt="pretty")
         print(table)
 
     def show_res_q1(self, data):
@@ -32,21 +33,24 @@ class View:
         print(table)
 
     def show_publication(self, tasks):
+        data = [(obj.PublicationID, obj.Name, obj.Language, obj.Pages, obj.Field) for obj in tasks]
         print("Publications:")
         headers = ["PublicationID", "Name", "Language", "Pages", "Field"]
-        table = tabulate(tasks, headers, tablefmt="pretty")
+        table = tabulate(data, headers, tablefmt="pretty")
         print(table)
 
     def show_collection(self, tasks):
+        data = [(obj.ISSN, obj.Name, obj.Type, obj.Category) for obj in tasks]
         print("Collections:")
         headers = ["ISSN", "Name", "Type", "Category"]
-        table = tabulate(tasks, headers, tablefmt="pretty")
+        table = tabulate(data, headers, tablefmt="pretty")
         print(table)
 
     def show_publishing(self, tasks):
+        data = [(obj.AuthorID, obj.PublicationID, obj.ISSN, obj.date) for obj in tasks]
         print("Publishings:")
         headers = ["AuthorID", "PublicationID", "ISSN", "Date"]
-        table = tabulate(tasks, headers, tablefmt="pretty")
+        table = tabulate(data, headers, tablefmt="pretty")
         print(table)
 
     def get_data_input(self, table_name):
@@ -54,11 +58,11 @@ class View:
             authorid = input("Enter AuthorID: ")
             name = input("Enter author's Name: ")
             surname = input("Enter author's Surname: ")
-            data = {
-                "\"AuthorID\"": authorid,
-                "\"Name\"": name,
-                "\"Surname\"": surname
-            }
+            data = [
+                authorid,
+                name,
+                surname
+            ]
             return data
         elif table_name == "Publication":
             pid = input("Enter PublicationID: ")
@@ -66,37 +70,37 @@ class View:
             language = input("Enter language: ")
             field = input("Enter field: ")
             pages = input("Enter pages: ")
-            data = {
-                "\"PublicationID\"": pid,
-                "\"Name\"": name,
-                "\"Language\"": language,
-                "\"Field\"": field,
-                "\"Pages\"": pages
-            }
+            data = [
+                pid,
+                name,
+                language,
+                field,
+                pages
+            ]
             return data
         elif table_name == "Collection":
             issn = input("Enter ISSN: ")
             name = input("Enter collection's name: ")
             typec = input("Enter collection's type: ")
             category = input("Enter collection's category: ")
-            data = {
-                "\"ISSN\"": issn,
-                "\"Name\"": name,
-                "\"Type\"": typec,
-                "\"Category\"": category
-            }
+            data = [
+                issn,
+                name,
+                typec,
+                category
+            ]
             return data
         elif table_name == "Publishing":
             authorid = input("Enter AuthorID: ")
             pid = input("Enter PublicationID: ")
             issn = input("Enter ISSN: ")
             date = input("Enter Date: ")
-            data = {
-                "\"AuthorID\"": authorid,
-                "\"PublicationID\"": pid,
-                "\"ISSN\"": issn,
-                "\"Date\"": date
-            }
+            data = [
+                authorid,
+                pid,
+                issn,
+                date
+            ]
             return data
 
     def get_update_input(self, table_name, pk):
@@ -104,11 +108,11 @@ class View:
             authorid = pk
             name = input("Enter author's Name: ")
             surname = input("Enter author's Surname: ")
-            data = {
-                "\"AuthorID\"": authorid,
-                "\"Name\"": name,
-                "\"Surname\"": surname
-            }
+            data = [
+                authorid,
+                name,
+                surname
+            ]
             return data
         elif table_name == "Publication":
             pid = pk
@@ -116,25 +120,25 @@ class View:
             language = input("Enter language: ")
             field = input("Enter field: ")
             pages = input("Enter pages: ")
-            data = {
-                "\"PublicationID\"": pid,
-                "\"Name\"": name,
-                "\"Language\"": language,
-                "\"Field\"": field,
-                "\"Pages\"": pages
-            }
+            data = [
+                pid,
+                name,
+                language,
+                field,
+                pages
+            ]
             return data
         elif table_name == "Collection":
             issn = pk
             name = input("Enter collection's name: ")
             typec = input("Enter collection's type: ")
             category = input("Enter collection's category: ")
-            data = {
-                "\"ISSN\"": issn,
-                "\"Name\"": name,
-                "\"Type\"": typec,
-                "\"Category\"": category
-            }
+            data = [
+                issn,
+                name,
+                typec,
+                category
+            ]
             return data
 
     def get_task_id(self):
